@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> Nuestro Super Mundo Michísimo </title>
+
+  <link rel="stylesheet" href="gati.css">
+  <script src="gati.js"></script>
+</head>
+<body>
+
+  <!-- Fondo con patitas flotantes -->
+  <div class="bg-paws" id="bgPaws"></div>
+
+  <!-- Gatitos decorativos fijos -->
+  <div class="deco-cat bl">🐱</div>
+  <div class="deco-cat br">😸</div>
+
+  <!-- OVERLAY DE ÉXITO -->
+  <div class="success-overlay" id="successOverlay">
+    <div class="success-box">
+      <div style="font-size:4rem">🎉</div>
+      <h2>Ya sabía que me amabas</h2>
+      <div class="success-cats">🐱🐱🐱</div>
+      <p>Eres lo mejor que me ha pasado... tú y nuestros gatitos jiji </p>
+      <button class="close-success" onclick="closeSuccess()">¡Siempre! 🐾</button>
+    </div>
+  </div>
+
+  <div class="page-wrapper">
+
+    <!-- ENCABEZADO -->
+    <header>
+      <div class="header-deco left">🌿</div>
+      <div class="header-deco right">🌿</div>
+      <h1 class="site-title">🐱 El mundo de gatitos que te hice 🐱</h1>
+    </header>
+
+    <!-- BANNER DE BIENVENIDA -->
+    <div class="welcome-banner">
+      ¡Bienvenidos a nuestro rinconcito felino! 🐾
+    </div>
+
+    <!-- FOTO PRINCIPAL -->
+    <section class="hero-section">
+      <div class="hero-frame">
+
+        <div class="cat-ears">
+          <div class="cat-ear"></div>
+          <div class="cat-ear"></div>
+        </div>
+
+        <div class="hero-img-container" id="heroImg">
+          <img src="img/dos.jpeg" alt="Silueta de gato" class="cat-silhouette">
+
+          <div class="img-placeholder">
+            <div class="icon"></div>
+            <div style="font-size:0.8rem; opacity:0.7">
+            </div>
+          </div>
+        </div>
+
+        <div class="whiskers">
+          <div class="whisker-group left">
+            <div class="whisker"></div>
+            <div class="whisker" style="width:60px"></div>
+            <div class="whisker" style="width:70px"></div>
+          </div>
+
+          <div class="whisker-group right">
+            <div class="whisker"></div>
+            <div class="whisker" style="width:60px"></div>
+            <div class="whisker" style="width:70px"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <p class="hero-caption">
+        Hice esto por que de verdad te adoro, y pues quería que lo vieras con tus propios ojos...<br>
+        <strong>Con amor, Sebabieco para mi niña linda</strong>
+      </p>
+    </section>
+
+    <div class="divider">🐾 · 🐾 · 🐾</div>
+
+    <!-- NUESTRA FAMILIA + MEMORIAS GATUNAS -->
+    <div class="two-col">
+
+      <!-- NUESTRA FAMILIA -->
+      <div>
+
+        <h2 class="section-title">🐾 Nuestra Familia</h2>
+
+        <div class="familia-cards">
+
+          <div class="family-card">
+            <div class="avatar-frame">
+              <img src="img/gre.jpeg" alt="Mi vida">
+            </div>
+            <h3>Gretel</h3>
+            <p>La dueña de los niños... y de mi corasonsh</p>
+          </div>
+
+          <div class="family-card">
+            <div class="avatar-frame">
+              <img src="img/yo.jpeg" alt="Alejandro">  
+            </div>
+            <h3>Shebissuperguapo</h3>
+            <p>El que la kga a cada rato pero no se rinde</p>
+          </div>
+
+          <div class="family-card">
+            <div class="avatar-frame">
+              <img src="img/sammy.jpeg" alt="Sammy">
+            </div>
+            <h3>Sammy</h3>
+            <p>La putisima kbra (siempre esta en las buenas y en las malas)</p>
+          </div>
+
+          <div class="family-card">
+            <div class="avatar-frame">
+              <img src="img/Silver.jpeg" alt="Silver">
+            </div>
+            <h3>Silver</h3>
+            <p>El solito puede con 20 T-Rex y gana</p>
+          </div>
+
+          <div class="family-card">
+            <div class="avatar-frame">
+              <img src="img/Ises.jpeg" alt="Ises">
+            </div>
+            <h3>Ises</h3>
+            <p>Es muy especial para mi niña</p>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- MEMORIAS GATUNAS -->
+      <div>
+
+        <h2 class="section-title">📸 Sebas & Gretel</h2>
+
+        <div class="memories-grid">
+
+          <div class="memory-frame">
+            <img src="img/recuerdo1.jpeg" alt="Recuerdo 1">
+            <div class="memory-placeholder">
+              <div class="icon"></div>
+            </div>
+          </div>
+
+          <div class="memory-frame">
+            <img src="img/recuerdo2.jpeg" alt="Recuerdo 2">
+            <div class="memory-placeholder">
+              <div class="icon"></div>
+            </div>
+          </div>
+
+          <div class="memory-frame">
+            <img src="img/recuerdo3.jpeg" alt="Recuerdo 3">
+            <div class="memory-placeholder">
+              <div class="icon"></div>
+            </div>
+          </div>
+
+          <div class="memory-frame">
+            <img src="img/recuerdo4.jpeg" alt="Recuerdo 4">
+            <div class="memory-placeholder">
+              <div class="icon"></div>
+            </div>
+          </div>
+
+          <div class="memory-frame">
+            <img src="img/recuero5.jpeg" alt="Recuerdo 5">
+            <div class="memory-placeholder">
+              <div class="icon"></div>
+            </div>
+          </div>
+
+          <div class="memory-frame">
+            <img src="img/recuerdo6.jpeg" alt="Recuerdo 6">
+            <div class="memory-placeholder">
+              <div class="icon"></div>
+  
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="divider">💕 · 🐱 · 💕</div>
+
+    <!-- BOTONES DE AMOR -->
+    <section class="love-section">
+      <p class="love-question">¿Me amas? 🥺🐱</p>
+
+      <div class="love-buttons" id="loveButtons">
+
+        <button class="btn-yes" onclick="yesPressed()">
+          ❤️ Sí te amo!
+        </button>
+
+        <button class="btn-no" id="noBtn">
+          😾 No te amo
+        </button>
+
+      </div>
+    </section>
+
+  </div>
+
+  <!-- PIE DE PÁGINA -->
+  <footer>
+    <div class="footer-icons">🐾 💕 🐱</div>
+    <p>Hecho con mucho amorsh ❤️</p>
+    <p style="font-size:0.8rem; margin-top:6px; opacity:0.6">© 2026</p>
+  </footer>
+
+</body>
+</html>
