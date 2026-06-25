@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galaxia 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;cursor:grab}
+body.drag{cursor:grabbing}
+
+/* WebGL canvas — fondo */
+#c{position:fixed;inset:0;width:100%;height:100%}
+
+/* Canvas 2D decorativo fijo — constelaciones/planetas en el fondo */
+#deco{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+
+/* Marcos de fotos — posición absoluta calculada por JS con misma MVP */
+#frames{position:fixed;inset:0;pointer-events:none;z-index:2}
+.frame{
+  position:absolute;
+  width:88px;height:88px;
+  border-radius:14px;
+  border:2px solid rgba(255,255,255,0.7);
+  background:rgba(10,10,20,0.55);
+  backdrop-filter:blur(4px);
+  box-shadow:0 0 20px rgba(255,255,255,0.3),0 0 60px rgba(255,255,255,0.08);
+  overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:auto;
+  cursor:pointer;
+  will-change:transform,opacity;
+  transform-origin:center center;
+}
+.frame:hover{box-shadow:0 0 32px rgba(255,255,255,0.6)}
+.frame img{width:100%;height:100%;object-fit:cover;border-radius:12px;display:block}
+.frame .ph{
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  color:rgba(255,255,255,0.55);font:600 0.6rem/1.2 sans-serif;text-align:center;padding:8px
+}
+.frame .ph i{font-size:1.8rem;font-style:normal}
+.frame input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+#hint{
+  position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+  color:rgba(255,255,255,0.3);font:0.68rem/1 sans-serif;letter-spacing:2px;
+  pointer-events:none;z-index:10
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="deco"></canvas>
+<div id="frames">
+  <div class="frame" id="f0"><div class="ph"><i></i>Tu foto</div><input type="file" accept="img/oli1.jpeg"></div>
+  <div class="frame" id="f1"><div class="ph"><i></i>Tu foto</div><input type="file" accept="img/oli2.jpeg"></div>
+  <div class="frame" id="f2"><div class="ph"><i></i>Tu foto</div><input type="file" accept="img/oli3.jpeg"></div>
+  <div class="frame" id="f3"><div class="ph"><i></i>Tu foto</div><input type="file" accept="img/oli4.jpeg"></div>
+  <div class="frame" id="f4"><div class="ph"><i></i>Tu foto</div><input type="file" accept="img/oli5.jpeg"></div>
+</div>
+<div id="hint">🖱 Scroll/pinch = zoom &nbsp;·&nbsp; Arrastra = rotar</div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  WEBGL — galaxia 3D
+// ══════════════════════════════════════════════════
+const cv=document.getElementById('c');
+const gl=cv.getContext('webgl')||cv.getContext('experimental-webgl');
+
+function resize(){
+  cv.width=innerWidth*devicePixelRatio; cv.height=innerHeight*devicePixelRatio;
+  cv.style.width=innerWidth+'px'; cv.style.height=innerHeight+'px';
+  gl.viewport(0,0,cv.width,cv.height);
+}
+resize(); addEventListener('resize',resize);
+
+const VS=`attribute vec3 aP;attribute float aS;attribute float aB;uniform mat4 uM;varying float vB;
+void main(){vec4 p=uM*vec4(aP,1);gl_Position=p;gl_PointSize=clamp(aS*500./p.w,.5,16.);vB=aB;}`;
+const FS=`precision mediump float;varying float vB;
+void main(){vec2 c=gl_PointCoord-.5;float d=dot(c,c);if(d>.25)discard;
+float a=(1.-smoothstep(.1,.25,d))*vB;gl_FragColor=vec4(1,1,1,a);}`;
+
+function sh(t,s){const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);return x;}
+const pr=gl.createProgram();
+gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));
+gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));
+gl.linkProgram(pr);gl.useProgram(pr);
+const lP=gl.getAttribLocation(pr,'aP');
+const lS=gl.getAttribLocation(pr,'aS');
+const lB=gl.getAttribLocation(pr,'aB');
+const lM=gl.getUniformLocation(pr,'uM');
+
+// matrix helpers
+const m4=()=>new Float32Array(16);
+function ident(m){m.fill(0);m[0]=m[5]=m[10]=m[15]=1;return m;}
+function mul(a,b){const o=m4();for(let r=0;r<4;r++)for(let c=0;c<4;c++)o[c*4+r]=a[r]*b[c*4]+a[r+4]*b[c*4+1]+a[r+8]*b[c*4+2]+a[r+12]*b[c*4+3];return o;}
+function persp(fov,asp,n,f){const m=m4(),t=1/Math.tan(fov/2);m[0]=t/asp;m[5]=t;m[10]=(f+n)/(n-f);m[11]=-1;m[14]=2*f*n/(n-f);return m;}
+function Rx(a){const m=m4(),c=Math.cos(a),s=Math.sin(a);ident(m);m[5]=c;m[6]=s;m[9]=-s;m[10]=c;return m;}
+function Ry(a){const m=m4(),c=Math.cos(a),s=Math.sin(a);ident(m);m[0]=c;m[2]=-s;m[8]=s;m[10]=c;return m;}
+function Tz(z){const m=m4();ident(m);m[14]=z;return m;}
+
+// particles
+const P=[],SZ=[],BR=[];
+const rn=Math.random;
+function star(x,y,z,s,b){P.push(x,y,z);SZ.push(s);BR.push(b);}
+
+// background sphere
+for(let i=0;i<1800;i++){
+  const u=rn(),v=rn(),th=Math.PI*2*u,ph=Math.acos(2*v-1),r=650+rn()*500;
+  star(r*Math.sin(ph)*Math.cos(th),r*Math.cos(ph),r*Math.sin(ph)*Math.sin(th),rn()*1.8+0.3,rn()*.7+.3);
+}
+// spiral arms
+function arm(off,n){for(let i=0;i<n;i++){
+  const t=i/n*Math.PI*4.5,r=t*52+rn()*22,a=t+off+(rn()-.5)*.5,sp=(rn()-.5)*18;
+  star(Math.cos(a)*r+Math.cos(a+Math.PI/2)*sp,(rn()-.5)*(r*.06+5),Math.sin(a)*r+Math.sin(a+Math.PI/2)*sp,rn()*2+.4,rn()*.8+.2);
+}}
+arm(0,700);arm(Math.PI,700);arm(Math.PI*.5,200);arm(Math.PI*1.5,200);
+// core
+for(let i=0;i<500;i++){const r=Math.pow(rn(),2)*65,th=rn()*Math.PI*2,ph=Math.acos(2*rn()-1);star(r*Math.sin(ph)*Math.cos(th),r*Math.cos(ph)*.5,r*Math.sin(ph)*Math.sin(th),rn()*3+.8,rn()*.4+.6);}
+// halo
+for(let i=0;i<300;i++){const r=200+rn()*200,th=rn()*Math.PI*2,ph=Math.acos(2*rn()-1);star(r*Math.sin(ph)*Math.cos(th),r*Math.cos(ph),r*Math.sin(ph)*Math.sin(th),rn()*1.2+.3,rn()*.4+.1);}
+// heart (upright)
+for(let i=0;i<360;i++){
+  const t=i/360*Math.PI*2;
+  const hx=16*Math.pow(Math.sin(t),3);
+  const hy=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+  const sc=4.8,j=()=>(rn()-.5)*3;
+  star(hx*sc+j(),hy*sc+j(),j()*2,rn()*2.5+1,rn()*.5+.5);
+}
+
+const N=P.length/3;
+function mkBuf(data,loc,sz){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,sz,gl.FLOAT,false,0,0);return b;}
+mkBuf(P,lP,3);mkBuf(SZ,lS,1);
+const brBase=new Float32Array(BR),brLive=new Float32Array(BR);
+const bPh=new Float32Array(N).map(()=>rn()*Math.PI*2);
+const bSp=new Float32Array(N).map(()=>rn()*.018+.004);
+const bBuf=gl.createBuffer();
+
+// ══════════════════════════════════════════════════
+//  FOTO FRAMES — posiciones 3D alrededor del corazón
+// ══════════════════════════════════════════════════
+// Radio pequeño = pegado al corazón, distribuido en círculo
+const SLOTS=[
+  {wx: 95, wy:  0, wz:  0},
+  {wx:-95, wy:  0, wz:  0},
+  {wx:  0, wy:  0, wz: 95},
+  {wx:  0, wy:  0, wz:-95},
+  {wx:  0, wy: 90, wz:  0},
+];
+SLOTS.forEach((s,i)=>{
+  s.fp=rn()*Math.PI*2;  // float phase
+  const el=document.getElementById('f'+i);
+  el.querySelector('input').addEventListener('change',ev=>{
+    const f=ev.target.files[0];if(!f)return;
+    const url=URL.createObjectURL(f);
+    el.innerHTML=`<img src="${url}">`;
+  });
+});
+
+// ══════════════════════════════════════════════════
+//  DECO CANVAS — constelaciones, planetas, nebulosas
+// ══════════════════════════════════════════════════
+const dc=document.getElementById('deco');
+const ctx=dc.getContext('2d');
+function resizeDeco(){dc.width=innerWidth;dc.height=innerHeight;}
+resizeDeco();addEventListener('resize',resizeDeco);
+
+// Constelaciones definidas como arrays de puntos normalizados [x,y]
+const CONSTELLATIONS=[
+  // Orión (simplificado)
+  {pts:[[.08,.18],[.10,.22],[.12,.18],[.09,.28],[.11,.28],[.08,.34],[.12,.34]],
+   lines:[[0,1],[1,2],[0,3],[2,4],[3,5],[4,6],[3,4]]},
+  // Cruz del Sur
+  {pts:[[.82,.60],[.82,.72],[.76,.66],[.88,.66]],
+   lines:[[0,1],[2,3]]},
+  // Casiopea (W)
+  {pts:[[.18,.72],[.22,.68],[.26,.72],[.30,.68],[.34,.72]],
+   lines:[[0,1],[1,2],[2,3],[3,4]]},
+  // Triángulo de verano
+  {pts:[[.55,.12],[.65,.08],[.70,.18]],
+   lines:[[0,1],[1,2],[2,0]]},
+  // Osa mayor (mango de cacerola)
+  {pts:[[.60,.78],[.64,.75],[.68,.76],[.72,.73],[.76,.70],[.79,.66],[.83,.63]],
+   lines:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]]},
+];
+
+// Estrellas fijas del fondo (canvas 2D)
+const BG_STARS=Array.from({length:400},()=>({
+  x:rn(),y:rn(),r:rn()*1.4+.2,ph:rn()*Math.PI*2,sp:rn()*.012+.003
+}));
+
+// Planetas
+const PLANETS=[
+  {x:.15,y:.35,r:18,color:'#c8a882',rings:true,  rColor:'#e8d0a0',label:'Saturno'},
+  {x:.88,y:.25,r:12,color:'#6ab4e8',rings:false, label:'Neptuno'},
+  {x:.72,y:.82,r:22,color:'#e8b06a',rings:false, label:'Júpiter', bands:true},
+  {x:.38,y:.88,r:8, color:'#e87060',rings:false, label:'Marte'},
+  {x:.92,y:.60,r:10,color:'#d4e8a0',rings:false, label:'Urano'},
+];
+
+// Shooting stars
+const SHOOTS=[];
+function spawnShoot(){
+  if(SHOOTS.length>6)return;
+  SHOOTS.push({x:rn(),y:rn()*.4,vx:(rn()*.006+.003)*(rn()<.5?1:-1),vy:rn()*.004+.002,life:1,len:rn()*80+40});
+}
+setInterval(spawnShoot,2200);
+
+// Nebulosas
+const NEBULAE=[
+  {x:.30,y:.20,rx:120,ry:60,  color:'rgba(80,40,160,.12)', angle:.3},
+  {x:.75,y:.65,rx:90, ry:110, color:'rgba(40,80,140,.10)', angle:-.5},
+  {x:.55,y:.45,rx:70, ry:70,  color:'rgba(100,50,80,.08)',  angle:0},
+];
+
+// ── helper: darken/lighten a hex color ──────────────────
+function shadeColor(hex,pct){
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.min(255,Math.max(0,((n>>16)&255)*(1+pct)));
+  const g=Math.min(255,Math.max(0,((n>>8) &255)*(1+pct)));
+  const b=Math.min(255,Math.max(0,( n     &255)*(1+pct)));
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+function hexToRgba(hex,a){
+  const n=parseInt(hex.slice(1),16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+
+function drawDeco(){
+  const W=dc.width,H=dc.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Nebulosas
+  NEBULAE.forEach(n=>{
+    ctx.save();
+    ctx.translate(n.x*W,n.y*H);
+    ctx.rotate(n.angle);
+    ctx.scale(1,n.ry/n.rx);
+    ctx.fillStyle=n.color;
+    ctx.beginPath();ctx.arc(0,0,n.rx,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  });
+
+  // Planetas
+  PLANETS.forEach(p=>{
+    const px=p.x*W,py=p.y*H;
+    ctx.save();
+    // glow
+    ctx.globalAlpha=0.18;
+    ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(px,py,p.r*3,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+
+    // planet body gradient
+    const pg=ctx.createRadialGradient(px-p.r*.3,py-p.r*.3,p.r*.1,px,py,p.r);
+    pg.addColorStop(0,'#ffffff');
+    pg.addColorStop(.3,p.color);
+    pg.addColorStop(1,shadeColor(p.color,-.4));
+    ctx.fillStyle=pg;
+    ctx.beginPath();ctx.arc(px,py,p.r,0,Math.PI*2);ctx.fill();
+
+    // bands (Jupiter)
+    if(p.bands){
+      ctx.save();ctx.globalAlpha=0.25;ctx.fillStyle='#c87840';
+      for(let b=-2;b<=2;b++){
+        ctx.beginPath();
+        ctx.ellipse(px,py+b*p.r*.28,p.r,p.r*.08,0,0,Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // rings (Saturn)
+    if(p.rings){
+      ctx.save();
+      ctx.strokeStyle='rgba(232,208,160,0.55)';
+      for(let ri=1;ri<=3;ri++){
+        ctx.lineWidth=ri===2?3:1.5;
+        ctx.globalAlpha=ri===2?.5:.25;
+        ctx.beginPath();
+        ctx.ellipse(px,py,p.r*(1.6+ri*.22),p.r*.38,-.2,0,Math.PI*2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  });
+
+  // Constelaciones
+  CONSTELLATIONS.forEach(con=>{
+    const pts=con.pts.map(p=>({x:p[0]*W,y:p[1]*H}));
+    // lines
+    ctx.save();
+    ctx.strokeStyle='rgba(200,220,255,0.18)';
+    ctx.lineWidth=.8;
+    ctx.setLineDash([3,5]);
+    con.lines.forEach(([a,b])=>{
+      ctx.beginPath();ctx.moveTo(pts[a].x,pts[a].y);ctx.lineTo(pts[b].x,pts[b].y);ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    // dots
+    pts.forEach(p=>{
+      ctx.globalAlpha=.9;
+      ctx.fillStyle='#fff';
+      ctx.shadowColor='#aaccff';ctx.shadowBlur=8;
+      ctx.beginPath();ctx.arc(p.x,p.y,1.8,0,Math.PI*2);ctx.fill();
+    });
+    ctx.restore();
+  });
+
+  // Background twinkling stars
+  BG_STARS.forEach(s=>{
+    s.ph+=s.sp;
+    const a=Math.sin(s.ph)*.45+.55;
+    ctx.globalAlpha=a*.7;
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+
+  // Shooting stars
+  for(let i=SHOOTS.length-1;i>=0;i--){
+    const s=SHOOTS[i];
+    s.x+=s.vx;s.y+=s.vy;s.life-=.008;
+    if(s.life<=0||s.x<0||s.x>1||s.y>1){SHOOTS.splice(i,1);continue;}
+    ctx.save();
+    const grd=ctx.createLinearGradient(s.x*W,s.y*H,(s.x-s.vx*s.len/.006)*W,(s.y-s.vy*s.len/.006)*H);
+    grd.addColorStop(0,`rgba(255,255,255,${s.life*.9})`);
+    grd.addColorStop(1,'transparent');
+    ctx.strokeStyle=grd;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(s.x*W,s.y*H);
+    ctx.lineTo((s.x-s.vx*20)*W,(s.y-s.vy*20)*H);
+    ctx.stroke();ctx.restore();
+  }
+
+  requestAnimationFrame(drawDeco);
+}
+drawDeco();
+
+function shadeColor(hex,pct){
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.min(255,Math.max(0,((n>>16)&255)*(1+pct)));
+  const g=Math.min(255,Math.max(0,((n>>8)&255)*(1+pct)));
+  const b=Math.min(255,Math.max(0,(n&255)*(1+pct)));
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+
+// ══════════════════════════════════════════════════
+//  INTERACCIÓN — drag + zoom
+// ══════════════════════════════════════════════════
+let rx=-0.42,ry=0,vx=0,vy=.0018,drag=false,lx=0,ly=0;
+let camZ=-520,zVel=0;
+const CAM_MIN=-150,CAM_MAX=-950;
+
+document.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY;vx=vy=0;document.body.classList.add('drag');});
+document.addEventListener('mousemove',e=>{if(!drag)return;vy=(e.clientX-lx)*.005;vx=(e.clientY-ly)*.005;ry+=vy;rx+=vx;rx=Math.max(-1.5,Math.min(1.5,rx));lx=e.clientX;ly=e.clientY;});
+document.addEventListener('mouseup',()=>{drag=false;document.body.classList.remove('drag');});
+document.addEventListener('wheel',e=>{e.preventDefault();zVel+=e.deltaY*.45;},{passive:false});
+
+let pinch0=null;
+document.addEventListener('touchstart',e=>{
+  if(e.touches.length===1){const t=e.touches[0];drag=true;lx=t.clientX;ly=t.clientY;vx=vy=0;}
+  if(e.touches.length===2){drag=false;const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;pinch0=Math.hypot(dx,dy);}
+},{passive:true});
+document.addEventListener('touchmove',e=>{
+  if(e.touches.length===1&&drag){const t=e.touches[0];vy=(t.clientX-lx)*.005;vx=(t.clientY-ly)*.005;ry+=vy;rx+=vx;rx=Math.max(-1.5,Math.min(1.5,rx));lx=t.clientX;ly=t.clientY;}
+  if(e.touches.length===2&&pinch0!==null){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;const d=Math.hypot(dx,dy);zVel-=(d-pinch0)*3;pinch0=d;}
+},{passive:true});
+document.addEventListener('touchend',e=>{if(e.touches.length<2)pinch0=null;if(e.touches.length===0)drag=false;});
+
+// ══════════════════════════════════════════════════
+//  PROYECCIÓN — misma que WebGL (para los frames)
+//  Multiplica el punto 3D por la misma MVP
+// ══════════════════════════════════════════════════
+function mvpTransform(wx,wy,wz,mvp){
+  // vec4 = mvp * [wx,wy,wz,1]
+  const x=mvp[0]*wx+mvp[4]*wy+mvp[8]*wz +mvp[12];
+  const y=mvp[1]*wx+mvp[5]*wy+mvp[9]*wz +mvp[13];
+  const z=mvp[2]*wx+mvp[6]*wy+mvp[10]*wz+mvp[14];
+  const w=mvp[3]*wx+mvp[7]*wy+mvp[11]*wz+mvp[15];
+  if(w<=0)return null;
+  const ndcX=x/w, ndcY=y/w;
+  return{
+    sx:(ndcX*.5+.5)*innerWidth,
+    sy:(-ndcY*.5+.5)*innerHeight,
+    depth:w
+  };
+}
+
+// ══════════════════════════════════════════════════
+//  RENDER LOOP
+// ══════════════════════════════════════════════════
+let tick=0;
+function frame(){
+  tick+=.016;
+
+  // zoom
+  zVel*=.88; camZ=Math.max(CAM_MAX,Math.min(CAM_MIN,camZ+zVel));
+
+  // rotation
+  if(!drag){vy+=(0.0018-vy)*.025;vx*=.94;ry+=vy;rx+=vx;rx=Math.max(-1.5,Math.min(1.5,rx));}
+
+  // twinkle
+  for(let i=0;i<N;i++){bPh[i]+=bSp[i];brLive[i]=brBase[i]*(.5+.5*Math.sin(bPh[i]));}
+  gl.bindBuffer(gl.ARRAY_BUFFER,bBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,brLive,gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(lB);
+  gl.vertexAttribPointer(lB,1,gl.FLOAT,false,0,0);
+
+  // build MVP — same used for frames
+  const asp=cv.width/cv.height;
+  const mvp=mul(persp(Math.PI/3.5,asp,1,3000), mul(Tz(camZ), mul(Rx(rx),Ry(ry))));
+
+  gl.uniformMatrix4fv(lM,false,mvp);
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+  gl.drawArrays(gl.POINTS,0,N);
+
+  // ── position photo frames using the EXACT same MVP ──
+  SLOTS.forEach((s,i)=>{
+    s.fp+=.013;
+    const floatOff=Math.sin(s.fp)*10; // ±10px float
+
+    const proj=mvpTransform(s.wx,s.wy,s.wz,mvp);
+    const el=document.getElementById('f'+i);
+
+    if(!proj||proj.depth<=0){el.style.opacity='0';return;}
+
+    // NDC depth gives us natural perspective scale
+    const scale=Math.max(.25,Math.min(1.8,480/proj.depth));
+    const alpha=Math.max(0,Math.min(1,(scale-.2)*1.5));
+    const hw=44*scale; // half-width for centering
+
+    el.style.opacity=alpha;
+    el.style.transform=`translate(${proj.sx-hw}px,${proj.sy-hw+floatOff}px) scale(${scale})`;
+    el.style.zIndex=Math.round(5000-proj.depth);
+  });
+
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
